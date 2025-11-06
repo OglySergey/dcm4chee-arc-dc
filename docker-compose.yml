@@ -1,0 +1,106 @@
+version: "3"
+services:
+  ldap:
+    container_name: dcm4chee-ldap
+    image: dcm4che/slapd-dcm4chee:2.6.8-34.2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+      - "389:389"
+      - "636:636"
+    environment:
+      STORAGE_DIR: /storage/fs1
+      ARCHIVE_DEVICE_NAME: pacs-server
+      ARCHIVE_WEBAPP_NAME: pacs-server
+      AE_TITLE: PACS_ZEYA
+    volumes:
+      - /opt/dcm4chee/ldap:/var/lib/openldap/openldap-data
+      - /opt/dcm4chee/slapd.d:/etc/openldap/slapd.d
+  db:
+    container_name: dcm4chee-db
+    image: dcm4che/postgres-dcm4chee:17.4-34
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: pacsdb
+      POSTGRES_MULTIPLE_DATABASES: pacsdb,keycloak
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /opt/dcm4chee/db:/var/lib/postgresql/data
+      - /opt/dcm4chee/99-create-keyloak-db.sh:/docker-entrypoint-initdb.d/99-create-keyloak-db.sh:ro
+  keycloak:
+    container_name: dcm4chee-keycloak
+    image: dcm4che/keycloak:25.0.6
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+    ports:
+      - "8843:8843"
+    environment:
+      KC_HTTPS_PORT: 8843
+      KC_HOSTNAME: https://<FDN>:8843
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true'
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: changeit
+      KEYCLOAK_ADMIN: kcadmin
+      KEYCLOAK_ADMIN_PASSWORD: kcpwd
+      DB_VENDOR: postgres
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: pacs
+      KC_DB_PASSWORD: pacs
+      KC_LOG: file
+      ARCHIVE_HOST: <FDN>
+      WILDFLY_CONSOLE_REDIRECT_URL: https://<FDN>:9993/console/*
+      ARCHIVE_WEB_ORIGIN: https://<FDN>:8443
+      KEYCLOAK_WAIT_FOR: ldap:389 db:5432
+    depends_on:
+      - ldap
+      - db
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /opt/dcm4chee/keycloak:/opt/keycloak/data
+      - /opt/dcm4chee/key.p12:/opt/keycloak/conf/keystores/key.p12:ro
+  arc:
+    container_name: dcm4chee-arc
+    image: dcm4che/dcm4chee-arc-psql:5.34.2-secure
+    ports:
+      - "6660:6660"
+      - "8080:8080"
+      - "8443:8443"
+      - "9990:9990"
+      - "9993:9993"
+      - "11112:11112"
+      - "2762:2762"
+      - "2575:2575"
+      - "12575:12575"
+    environment:
+      ARCHIVE_DEVICE_NAME: pacs-server
+      POSTGRES_DB: pacsdb
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+      AUTH_SERVER_URL: https://keycloak:8843
+      UI_AUTH_SERVER_URL: https://<FDN>:8843
+      WILDFLY_CHOWN: /storage
+      WILDFLY_WAIT_FOR: ldap:389 db:5432 keycloak:8843
+    depends_on:
+      - ldap
+      - keycloak
+      - db
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /opt/dcm4chee/wildfly:/opt/wildfly/standalone
+      - /opt/dcm4chee/key.p12:/opt/wildfly/standalone/configuration/keystores/key.p12:ro
+      - /ARCHIVE:/storage
