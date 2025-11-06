@@ -1,5 +1,5 @@
 # dcm4chee-arc-dc
-Doker-compose stack for dcm4chee-arc-light, based on original doker from **dcm4chee**
+Doker-compose stack for dcm4chee-arc-light, based on original doker from **dcm4che**
 
 List conteiners:
 1.  **dcm4chee-ldap** - conteiner with openldap
